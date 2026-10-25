@@ -55,6 +55,7 @@ fun HomeScreen(store: Store, nav: (Screen) -> Unit) {
     val pinned = remember { store.pinnedApps().mapNotNull { installed[it] } }
     var latest by remember { mutableStateOf(latestCache ?: emptyList()) }
     var featuredIndex by rememberSaveable { mutableStateOf(0) }
+    var crash by remember { mutableStateOf(store.lastCrash) }
     FocusOnStart(first)
 
     LaunchedEffect(Unit) {
@@ -112,6 +113,17 @@ fun HomeScreen(store: Store, nav: (Screen) -> Unit) {
                 )
             } else {
                 Hint("Your playlists and apps in one place")
+            }
+            crash?.let { report ->
+                Spacer(Modifier.height(12.dp))
+                Tile(
+                    onClick = { store.clearCrash(); crash = null },
+                    modifier = Modifier.width(900.dp),
+                ) {
+                    Text("Hucks Show crashed last time. Take a photo of this for Claude, then press OK to hide it.", color = ErrorRed, fontSize = 15.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(report.lines().take(10).joinToString("\n"), fontSize = 12.sp, color = Dim)
+                }
             }
             Spacer(Modifier.height(18.dp))
 

@@ -3,13 +3,16 @@ package com.shanemarchant.hubtv.data
 object M3uParser {
     private val attrRegex = Regex("([A-Za-z0-9_-]+)=\"([^\"]*)\"")
 
-    fun parse(sourceId: String, text: String): List<MediaItem> {
+    fun parse(sourceId: String, text: String): List<MediaItem> = parse(sourceId, text.lineSequence())
+
+    fun parse(sourceId: String, lines: Sequence<String>, onProgress: (Int) -> Unit = {}): List<MediaItem> {
         val out = ArrayList<MediaItem>()
         var title: String? = null
         var group = ""
         var logo: String? = null
+        var epgId: String? = null
 
-        for (raw in text.lineSequence()) {
+        for (raw in lines) {
             val line = raw.trim()
             if (line.isEmpty()) continue
             when {
@@ -22,6 +25,7 @@ object M3uParser {
                     title = name.ifBlank { attrs["tvg-name"] ?: "Untitled" }
                     group = attrs["group-title"] ?: ""
                     logo = attrs["tvg-logo"]?.blankToNull()
+                    epgId = attrs["tvg-id"]?.blankToNull()
                 }
                 line.startsWith("#EXTGRP:", ignoreCase = true) -> {
                     if (group.isBlank()) group = line.substring(8).trim()
@@ -29,8 +33,9 @@ object M3uParser {
                 line.startsWith("#") -> Unit
                 else -> {
                     val t = title ?: line.substringAfterLast('/')
-                    out += MediaItem(sourceId, t, group.ifBlank { "Uncategorised" }, guessKind(line, group), line, logo)
-                    title = null; group = ""; logo = null
+                    out += MediaItem(sourceId, t, group.ifBlank { "Uncategorised" }, guessKind(line, group), line, logo, epgId = epgId)
+                    title = null; group = ""; logo = null; epgId = null
+                    if (out.size % 500 == 0) onProgress(out.size)
                 }
             }
         }

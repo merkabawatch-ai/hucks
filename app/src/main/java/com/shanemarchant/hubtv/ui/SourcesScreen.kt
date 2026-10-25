@@ -146,18 +146,35 @@ fun AddSourceScreen(type: SourceType, store: Store, back: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 24.dp)) {
         ScreenTitle(if (xtream) "Add Xtream login" else "Add M3U link")
         Hint(
-            if (xtream) "Use the server address, username and password from your provider."
-            else "Paste the full M3U/M3U8 link (an Xtream get.php link works too)."
+            if (xtream) "Fill in the 4 boxes below. Move between them with up and down on the remote."
+            else "Fill in the 2 boxes below. Move between them with up and down on the remote."
         )
         Spacer(Modifier.height(16.dp))
-        Field("Name (e.g. My IPTV)", name, { name = it }, modifier = Modifier.focusRequester(first))
-        Spacer(Modifier.height(8.dp))
-        Field(if (xtream) "Server (e.g. http://example.com:8080)" else "M3U link", url, { url = it; checkFailed = false })
+        Field(
+            "1. Playlist name", name, { name = it },
+            modifier = Modifier.focusRequester(first),
+            example = "My IPTV",
+            help = "Anything you like, so you can tell your playlists apart.",
+        )
         if (xtream) {
-            Spacer(Modifier.height(8.dp))
-            Field("Username", user, { user = it; checkFailed = false })
-            Spacer(Modifier.height(8.dp))
-            Field("Password", pass, { pass = it; checkFailed = false }, imeAction = ImeAction.Done, onDone = { submit() })
+            Field(
+                "2. Server address", url, { url = it; checkFailed = false },
+                example = "http://line.example.com:80",
+                help = "Also called Host or URL. Include http:// and the :port number.",
+            )
+            Field("3. Username", user, { user = it; checkFailed = false }, example = "From your provider")
+            Field(
+                "4. Password", pass, { pass = it; checkFailed = false },
+                imeAction = ImeAction.Done, onDone = { submit() },
+                example = "From your provider",
+            )
+        } else {
+            Field(
+                "2. M3U link", url, { url = it; checkFailed = false },
+                imeAction = ImeAction.Done, onDone = { submit() },
+                example = "http://line.example.com/get.php?username=…&password=…",
+                help = "The full link your provider gave you.",
+            )
         }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {

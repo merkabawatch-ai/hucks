@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import coil.compose.AsyncImage
 import com.shanemarchant.hubtv.Screen
 import com.shanemarchant.hubtv.data.AppLauncher
 import com.shanemarchant.hubtv.data.Kind
+import com.shanemarchant.hubtv.data.LanguageFilter
 import com.shanemarchant.hubtv.data.MediaItem
 import com.shanemarchant.hubtv.data.Repo
 import com.shanemarchant.hubtv.data.Store
@@ -79,7 +81,8 @@ fun SearchScreen(store: Store, nav: (Screen) -> Unit, initialQuery: String = "")
             local = withContext(Dispatchers.Default) {
                 val out = ArrayList<MediaItem>()
                 for (s in store.sources()) {
-                    try { out += Repo.items(s).filter { it.title.contains(q, ignoreCase = true) } } catch (e: Exception) { }
+                    val englishOnly = store.englishOnly
+                    try { out += Repo.items(s).filter { it.title.contains(q, ignoreCase = true) && (!englishOnly || LanguageFilter.allowed(it)) } } catch (e: Exception) { }
                 }
                 out.sortedBy { it.kind.ordinal }.take(200)
             }
@@ -97,7 +100,8 @@ fun SearchScreen(store: Store, nav: (Screen) -> Unit, initialQuery: String = "")
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Field(
-                label = "Film, show or channel",
+                label = "Search for",
+                example = "Film, show or channel",
                 value = query,
                 onChange = { query = it },
                 imeAction = ImeAction.Search,
@@ -108,6 +112,10 @@ fun SearchScreen(store: Store, nav: (Screen) -> Unit, initialQuery: String = "")
             Tile(onClick = { run() }) { Text(if (busy) "Searching…" else "Search", fontSize = 18.sp) }
         }
         message?.let { Hint(it) }
+        if (busy) {
+            val status by Repo.status.collectAsState()
+            if (status.isNotBlank()) Hint(status, Accent)
+        }
         Spacer(Modifier.height(12.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(6.dp)) {

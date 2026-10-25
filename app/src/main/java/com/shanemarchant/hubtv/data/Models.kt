@@ -21,6 +21,8 @@ data class MediaItem(
     val streamUrl: String?,
     val logo: String?,
     val seriesId: String? = null,
+    val streamId: String? = null,
+    val epgId: String? = null,
 )
 
 data class Episode(val title: String, val season: Int, val number: Int, val streamUrl: String)
@@ -37,5 +39,8 @@ data class TmdbResult(
 )
 
 data class AppInfo(val pkg: String, val label: String)
+
+/** Stable ID for favourites and history. */
+fun MediaItem.key(): String = "$sourceId|${kind.name}|${streamUrl ?: seriesId ?: title}"
 
 internal fun String.blankToNull(): String? = if (isBlank() || this == "null") null else this

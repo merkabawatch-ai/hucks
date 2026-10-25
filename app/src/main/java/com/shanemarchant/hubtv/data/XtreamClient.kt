@@ -1,11 +1,13 @@
 package com.shanemarchant.hubtv.data
 
-import kotlinx.coroutines.Dispatchers
+import android.util.JsonReader
+import android.util.JsonToken
 import kotlinx.coroutines.async
 import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.InputStream
+import java.io.InputStreamReader
 import java.net.URLEncoder
 
 fun normaliseServer(raw: String): String {
@@ -21,6 +23,15 @@ class XtreamClient(private val source: Source) {
     private val base = normaliseServer(source.url)
     private val user = source.username
     private val pass = source.password
+
+    private val counts = java.util.concurrent.ConcurrentHashMap<Kind, Int>()
+
+    private fun progress(kind: Kind, n: Int) {
+        counts[kind] = n
+        val parts = listOf(Kind.LIVE to "Live", Kind.MOVIE to "Movies", Kind.SERIES to "Series")
+            .mapNotNull { (k, label) -> counts[k]?.let { "$label ${"%,d".format(it)}" } }
+        Repo.report("${source.name}: " + parts.joinToString(" · ") + " loaded…")
+    }
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 
@@ -38,6 +49,7 @@ class XtreamClient(private val source: Source) {
 
     /** Loads live, movies and series. One failing section doesn't kill the others. */
     suspend fun all(): List<MediaItem> = supervisorScope {
+        Repo.report("${source.name}: logged in, asking for channel lists…")
         val jobs = listOf(
             async { streams("get_live_categories", "get_live_streams", Kind.LIVE) },
             async { streams("get_vod_categories", "get_vod_streams", Kind.MOVIE) },
@@ -49,44 +61,64 @@ class XtreamClient(private val source: Source) {
     }
 
     private suspend fun streams(catAction: String, action: String, kind: Kind): List<MediaItem> {
-        val catText = runCatching { Http.get(api(catAction)) }.getOrDefault("[]")
-        val text = Http.get(api(action))
-        return withContext(Dispatchers.Default) {
-            val cats = HashMap<String, String>()
-            val catArr = jsonArray(catText)
+        val cats = HashMap<String, String>()
+        runCatching {
+            val catArr = jsonArray(Http.get(api(catAction)))
             for (i in 0 until catArr.length()) {
                 val c = catArr.optJSONObject(i) ?: continue
                 cats[c.optString("category_id")] = c.optString("category_name")
             }
-            val arr = jsonArray(text)
-            val out = ArrayList<MediaItem>(arr.length())
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                val name = o.optString("name").blankToNull() ?: "Untitled"
-                val group = cats[o.optString("category_id")]?.blankToNull() ?: "Other"
-                out += when (kind) {
-                    Kind.LIVE -> MediaItem(
-                        source.id, name, group, kind,
-                        "$base/live/$user/$pass/${o.optString("stream_id")}.ts",
-                        o.optString("stream_icon").blankToNull(),
-                    )
-                    Kind.MOVIE -> {
-                        val ext = o.optString("container_extension").blankToNull() ?: "mp4"
-                        MediaItem(
-                            source.id, name, group, kind,
-                            "$base/movie/$user/$pass/${o.optString("stream_id")}.$ext",
-                            o.optString("stream_icon").blankToNull(),
-                        )
-                    }
-                    Kind.SERIES -> MediaItem(
-                        source.id, name, group, kind, null,
-                        o.optString("cover").blankToNull(),
-                        seriesId = o.optString("series_id"),
-                    )
+        }
+        progress(kind, 0)
+        // Stream lists can be huge, so read them item by item instead of all at once.
+        return Http.stream(api(action)) { input -> readStreams(input, kind, cats) }.also { progress(kind, it.size) }
+    }
+
+    private fun JsonReader.str(): String = when (peek()) {
+        JsonToken.NULL -> { nextNull(); "" }
+        JsonToken.STRING, JsonToken.NUMBER -> nextString()
+        JsonToken.BOOLEAN -> nextBoolean().toString()
+        else -> { skipValue(); "" }
+    }
+
+    private fun readStreams(input: InputStream, kind: Kind, cats: Map<String, String>): List<MediaItem> {
+        val out = ArrayList<MediaItem>()
+        val r = JsonReader(InputStreamReader(input, Charsets.UTF_8))
+        r.isLenient = true
+        if (r.peek() != JsonToken.BEGIN_ARRAY) return out
+        r.beginArray()
+        while (r.hasNext()) {
+            if (r.peek() != JsonToken.BEGIN_OBJECT) { r.skipValue(); continue }
+            var name = ""; var id = ""; var cat = ""; var icon = ""; var ext = ""; var seriesId = ""; var cover = ""; var epg = ""
+            r.beginObject()
+            while (r.hasNext()) {
+                when (r.nextName()) {
+                    "name" -> name = r.str()
+                    "stream_id" -> id = r.str()
+                    "category_id" -> cat = r.str()
+                    "stream_icon" -> icon = r.str()
+                    "container_extension" -> ext = r.str()
+                    "series_id" -> seriesId = r.str()
+                    "cover" -> cover = r.str()
+                    "epg_channel_id" -> epg = r.str()
+                    else -> r.skipValue()
                 }
             }
-            out
+            r.endObject()
+            if (out.size % 500 == 0) progress(kind, out.size)
+            val title = name.blankToNull() ?: "Untitled"
+            val group = cats[cat]?.blankToNull() ?: "Other"
+            out += when (kind) {
+                Kind.LIVE -> MediaItem(source.id, title, group, kind, "$base/live/$user/$pass/$id.ts", icon.blankToNull(), streamId = id, epgId = epg.blankToNull())
+                Kind.MOVIE -> MediaItem(
+                    source.id, title, group, kind,
+                    "$base/movie/$user/$pass/$id.${ext.blankToNull() ?: "mp4"}", icon.blankToNull(),
+                )
+                Kind.SERIES -> MediaItem(source.id, title, group, kind, null, cover.blankToNull(), seriesId = seriesId)
+            }
         }
+        r.endArray()
+        return out
     }
 
     suspend fun episodes(seriesId: String): List<Episode> {

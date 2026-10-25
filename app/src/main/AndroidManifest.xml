@@ -24,6 +24,7 @@
         android:banner="@drawable/banner"
         android:theme="@style/Theme.HubTV"
         android:usesCleartextTraffic="true"
+        android:largeHeap="true"
         android:supportsRtl="true">
 
         <activity

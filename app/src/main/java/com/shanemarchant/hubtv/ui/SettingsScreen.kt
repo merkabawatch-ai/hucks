@@ -27,6 +27,7 @@ fun SettingsScreen(store: Store) {
     val ctx = LocalContext.current
     var key by rememberSaveable { mutableStateOf(store.tmdbKeyTyped) }
     var region by rememberSaveable { mutableStateOf(store.region) }
+    var englishOnly by remember { mutableStateOf(store.englishOnly) }
     val first = remember { FocusRequester() }
     FocusOnStart(first)
 
@@ -38,11 +39,19 @@ fun SettingsScreen(store: Store) {
             else "TMDB key (free from themoviedb.org → Settings → API). Either the API key or the Read Access Token works."
         )
         Spacer(Modifier.height(6.dp))
-        Field("TMDB key", key, { key = it }, modifier = Modifier.focusRequester(first))
+        Field("TMDB key", key, { key = it }, modifier = Modifier.focusRequester(first), example = "Leave empty to use the built-in key")
         Spacer(Modifier.height(14.dp))
         Hint("Country for \"where to watch\" (two letters, e.g. GB or MT)")
         Spacer(Modifier.height(6.dp))
-        Field("Country", region, { region = it.take(2) }, imeAction = ImeAction.Done)
+        Field("Country", region, { region = it.take(2) }, imeAction = ImeAction.Done, example = "GB")
+        Spacer(Modifier.height(18.dp))
+        Tile(onClick = {
+            englishOnly = !englishOnly
+            store.englishOnly = englishOnly
+        }) {
+            Text(if (englishOnly) "UK only: ON" else "UK only: OFF (showing all countries)", fontSize = 18.sp)
+            Hint("Live TV: only UK channels. Movies and Series: only English (UK, EN, US).")
+        }
         Spacer(Modifier.height(18.dp))
         Tile(onClick = {
             store.tmdbKey = key

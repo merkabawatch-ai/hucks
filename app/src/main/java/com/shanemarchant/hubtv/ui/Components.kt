@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
@@ -30,7 +33,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -124,16 +135,60 @@ fun Field(
     modifier: Modifier = Modifier,
     imeAction: ImeAction = ImeAction.Next,
     onDone: () -> Unit = {},
+    example: String = "",
+    help: String = "",
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = imeAction),
-        keyboardActions = KeyboardActions(onDone = { onDone() }, onSearch = { onDone() }, onGo = { onDone() }),
-        modifier = modifier.width(640.dp),
-    )
+    var focused by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    Column(Modifier.padding(vertical = 4.dp)) {
+        // The name sits above the box so it stays visible while typing.
+        Text(
+            (if (focused) "▶  " else "") + label,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (focused) Accent else Color.White,
+        )
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            placeholder = { if (example.isNotBlank()) Text(example, color = Dim) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = imeAction),
+            keyboardActions = KeyboardActions(onDone = { onDone() }, onSearch = { onDone() }, onGo = { onDone() }),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Accent,
+                unfocusedBorderColor = PanelFocus,
+                focusedContainerColor = Panel,
+                unfocusedContainerColor = Panel,
+                cursorColor = Accent,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+            ),
+            modifier = modifier
+                .width(640.dp)
+                .onFocusChanged { focused = it.isFocused }
+                // Firestick remote: OK opens the keyboard, up/down move to the next box.
+                .onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (e.key) {
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { keyboard?.show(); true }
+                        Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
+                        Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
+                        else -> false
+                    }
+                },
+        )
+        if (focused) {
+            Spacer(Modifier.height(2.dp))
+            Hint("Press OK on the remote to type", Accent)
+        }
+        if (help.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Hint(help)
+        }
+    }
 }
 
 /** Puts the remote's focus on something when a screen opens. */

@@ -16,7 +16,7 @@ object Tmdb {
         val bearer = key.length > 40
         val url = BASE + path + if (bearer) "" else ((if ('?' in path) "&" else "?") + "api_key=" + key)
         val headers = if (bearer) mapOf("Authorization" to "Bearer $key") else emptyMap()
-        return JSONObject(Http.get(url, headers))
+        return JSONObject(Http.get(url, headers, retry = false))
     }
 
     suspend fun search(key: String, query: String, region: String): List<TmdbResult> = coroutineScope {
